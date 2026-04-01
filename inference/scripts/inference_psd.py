@@ -2,6 +2,7 @@ import os.path as osp
 import argparse
 import sys
 import os
+import gc
 
 default_n_threads = 8
 os.environ['OPENBLAS_NUM_THREADS'] = f"{default_n_threads}"
@@ -50,6 +51,12 @@ if __name__ == '__main__':
         print('running layerdiff...')
         apply_layerdiff(srcp, args.repo_id_layerdiff, save_dir=args.save_dir, seed=args.seed, vae_ckpt=args.vae_ckpt, unet_ckpt=args.unet_ckpt, \
             resolution=args.resolution, disable_progressbar=args.disable_progressbar, num_inference_steps=args.inference_steps, group_offload=args.group_offload)
+
+        # Free LayerDiff pipeline from VRAM before loading Marigold
+        inference_utils.layerdiff_pipeline = None
+        gc.collect()
+        torch.cuda.empty_cache()
+        print('layerdiff pipeline freed from VRAM')
 
         print('running marigold...')
         apply_marigold(srcp, args.repo_id_depth, save_dir=args.save_dir, seed=args.seed, disable_progressbar=args.disable_progressbar, \
