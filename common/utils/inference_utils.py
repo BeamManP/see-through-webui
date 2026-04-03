@@ -106,18 +106,16 @@ def apply_layerdiff(
         def _crop_head(img, xywh):
             x, y, w, h = xywh
             ih, iw = img.shape[:2]
-            x1 = x
-            y1 = y
-            x2 = x + w
-            y2 = y + h
-            if w < iw // 2:
-                px = min(iw - x - w, x, w // 5)
-                x1 = min(max(x - px, 0), iw)
-                x2 = min(max(x + w + px, 0), iw)
-            if h < ih // 2:
-                py = min(ih - y - h, y, h // 5)
-                y2 = min(max(y + h + py, 0), ih)
-                y1 = min(max(y - py, 0), ih)
+
+            # Asymmetric padding: wider upward to capture headwear (hats, horns, etc.)
+            pad_x = int(w * 0.30)
+            pad_y_up = int(h * 0.60)
+            pad_y_down = int(h * 0.30)
+
+            x1 = max(x - min(pad_x, x), 0)
+            x2 = min(x + w + min(pad_x, iw - (x + w)), iw)
+            y1 = max(y - min(pad_y_up, y), 0)
+            y2 = min(y + h + min(pad_y_down, ih - (y + h)), ih)
 
             return img[y1: y2, x1: x2], (x1, y1, x2, y2)
 

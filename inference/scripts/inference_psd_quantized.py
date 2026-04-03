@@ -44,6 +44,41 @@ VALID_BODY_PARTS_V2 = [
 ]
 
 
+def require_cuda():
+    if not torch.cuda.is_available():
+        raise RuntimeError(
+            "CUDA GPU not detected. In Google Colab, set Runtime > Change runtime type > Hardware accelerator > GPU."
+        )
+
+
+def is_quantized_module(module):
+    if module is None:
+        return False
+    return any([
+        getattr(module, 'is_quantized', False),
+        getattr(module, 'is_loaded_in_4bit', False),
+        getattr(module, 'is_loaded_in_8bit', False),
+        getattr(module, 'quantization_method', None) is not None,
+    ])
+
+
+def move_module(module, *, device=None, dtype=None, label='module'):
+    if module is None:
+        return
+
+    if is_quantized_module(module):
+        print(f"  {label}: quantized module detected; leaving placement to transformers/bitsandbytes")
+        return
+
+    kwargs = {}
+    if device is not None:
+        kwargs['device'] = device
+    if dtype is not None:
+        kwargs['dtype'] = dtype
+    if kwargs:
+        module.to(**kwargs)
+
+
 def build_layerdiff_pipeline(args):
     """Build the LayerDiff3D pipeline with appropriate quantization."""
     quant_mode = args.quant_mode
@@ -56,18 +91,18 @@ def build_layerdiff_pipeline(args):
         pipeline = KDiffusionStableDiffusionXLPipeline.from_pretrained(
             repo, trans_vae=trans_vae, unet=unet, scheduler=None)
         if args.cpu_offload:
-            pipeline.vae.to(dtype=torch.bfloat16)
-            pipeline.trans_vae.to(dtype=torch.bfloat16)
-            pipeline.unet.to(dtype=torch.bfloat16)
-            pipeline.text_encoder.to(dtype=torch.bfloat16)
-            pipeline.text_encoder_2.to(dtype=torch.bfloat16)
+            move_module(pipeline.vae, dtype=torch.bfloat16, label='layerdiff.vae')
+            move_module(pipeline.trans_vae, dtype=torch.bfloat16, label='layerdiff.trans_vae')
+            move_module(pipeline.unet, dtype=torch.bfloat16, label='layerdiff.unet')
+            move_module(pipeline.text_encoder, dtype=torch.bfloat16, label='layerdiff.text_encoder')
+            move_module(pipeline.text_encoder_2, dtype=torch.bfloat16, label='layerdiff.text_encoder_2')
             pipeline.enable_model_cpu_offload()
         else:
-            pipeline.vae.to(dtype=torch.bfloat16, device='cuda')
-            pipeline.trans_vae.to(dtype=torch.bfloat16, device='cuda')
-            pipeline.unet.to(dtype=torch.bfloat16, device='cuda')
-            pipeline.text_encoder.to(dtype=torch.bfloat16, device='cuda')
-            pipeline.text_encoder_2.to(dtype=torch.bfloat16, device='cuda')
+            move_module(pipeline.vae, device='cuda', dtype=torch.bfloat16, label='layerdiff.vae')
+            move_module(pipeline.trans_vae, device='cuda', dtype=torch.bfloat16, label='layerdiff.trans_vae')
+            move_module(pipeline.unet, device='cuda', dtype=torch.bfloat16, label='layerdiff.unet')
+            move_module(pipeline.text_encoder, device='cuda', dtype=torch.bfloat16, label='layerdiff.text_encoder')
+            move_module(pipeline.text_encoder_2, device='cuda', dtype=torch.bfloat16, label='layerdiff.text_encoder_2')
             if getattr(args, 'group_offload', False):
                 pipeline.enable_group_offload('cuda', num_blocks_per_group=1)
         # Cache tag embeddings and unload text encoders to save VRAM
@@ -83,17 +118,32 @@ def build_layerdiff_pipeline(args):
 
         if args.cpu_offload:
             # VAE + TransparentVAE to bf16; quantized components handled by bnb
-            pipeline.vae.to(dtype=torch.bfloat16)
-            pipeline.trans_vae.to(dtype=torch.bfloat16)
+            move_module(pipeline.vae, dtype=torch.bfloat16, label='layerdiff.vae')
+            move_module(pipeline.trans_vae, dtype=torch.bfloat16, label='layerdiff.trans_vae')
             pipeline.enable_model_cpu_offload()
         else:
-            pipeline.vae.to(dtype=torch.bfloat16, device='cuda')
-            pipeline.trans_vae.to(dtype=torch.bfloat16, device='cuda')
+            move_module(pipeline.vae, device='cuda', dtype=torch.bfloat16, label='layerdiff.vae')
+            move_module(pipeline.trans_vae, device='cuda', dtype=torch.bfloat16, label='layerdiff.trans_vae')
             # Don't manually .to(cuda) quantized components -- bnb handles device placement
             if getattr(args, 'group_offload', False):
                 pipeline.enable_group_offload('cuda', num_blocks_per_group=1)
+        # NF4テキストエンコーダをdequantize（CUBLAS対策）
+        # bitsandbytes NF4 matmulはCUBLAS初期化エラーを起こすことがある。
+        # テキストエンコーダは一度だけ使用（タグ埋め込みキャッシュ）なので
+        # bf16に戻しても実用上の問題はない。
+        for enc_name in ['text_encoder', 'text_encoder_2']:
+            enc = getattr(pipeline, enc_name, None)
+            if enc is not None and hasattr(enc, 'dequantize'):
+                print(f'  [NF4 fix] Dequantizing {enc_name} to bf16...')
+                setattr(pipeline, enc_name,
+                        enc.dequantize().to(device='cuda', dtype=torch.bfloat16))
         # Cache tag embeddings and unload text encoders to save VRAM
         pipeline.cache_tag_embeds()
+        # キャッシュ後にテキストエンコーダ解放 → VRAM節約
+        for enc_name in ['text_encoder', 'text_encoder_2']:
+            if hasattr(pipeline, enc_name):
+                delattr(pipeline, enc_name)
+        torch.cuda.empty_cache()
 
     return pipeline
 
@@ -107,10 +157,10 @@ def build_marigold_pipeline(args):
         unet = UNetFrameConditionModel.from_pretrained(repo, subfolder='unet')
         marigold_pipe = MarigoldDepthPipeline.from_pretrained(repo, unet=unet)
         if args.cpu_offload:
-            marigold_pipe.to(dtype=torch.bfloat16)
+            move_module(marigold_pipe, dtype=torch.bfloat16, label='marigold.pipeline')
             marigold_pipe.enable_model_cpu_offload()
         else:
-            marigold_pipe.to(device='cuda', dtype=torch.bfloat16)
+            move_module(marigold_pipe, device='cuda', dtype=torch.bfloat16, label='marigold.pipeline')
             if getattr(args, 'group_offload', False):
                 marigold_pipe.enable_group_offload('cuda', num_blocks_per_group=1)
         marigold_pipe.cache_tag_embeds()
@@ -120,12 +170,9 @@ def build_marigold_pipeline(args):
         unet = UNetFrameConditionModel.from_pretrained(repo, subfolder='unet', torch_dtype=torch.bfloat16)
 
         marigold_pipe = MarigoldDepthPipeline.from_pretrained(repo, unet=unet, torch_dtype=torch.bfloat16)
-        marigold_pipe.vae.to(device='cuda')
-        marigold_pipe.unet.to(device='cuda')
-        # Text encoder may be quantized (from pre-quantized repo) — only move device, not dtype
-        if not getattr(marigold_pipe.text_encoder, 'is_quantized', False) and \
-           not getattr(marigold_pipe.text_encoder, 'quantization_method', None):
-            marigold_pipe.text_encoder.to(device='cuda')
+        move_module(marigold_pipe.vae, device='cuda', label='marigold.vae')
+        move_module(marigold_pipe.unet, device='cuda', label='marigold.unet')
+        move_module(marigold_pipe.text_encoder, device='cuda', label='marigold.text_encoder')
         if getattr(args, 'group_offload', False):
             marigold_pipe.enable_group_offload('cuda', num_blocks_per_group=1)
         marigold_pipe.cache_tag_embeds()
@@ -142,7 +189,7 @@ def run_layerdiff(pipeline, imgp, save_dir, seed, num_inference_steps, resolutio
     scale = pad_size[0] / resolution
     Image.fromarray(fullpage).save(osp.join(saved, 'src_img.png'))
 
-    rng = torch.Generator(device=pipeline.unet.device).manual_seed(seed)
+    rng = torch.Generator(device='cuda').manual_seed(seed)
 
     # Body pass
     body_tag_list = ['front hair', 'back hair', 'head', 'neck', 'neckwear', 'topwear', 'handwear', 'bottomwear', 'legwear', 'footwear', 'tail', 'wings', 'objects']
@@ -174,18 +221,16 @@ def run_layerdiff(pipeline, imgp, save_dir, seed, num_inference_steps, resolutio
     def _crop_head(img, xywh):
         x, y, w, h = xywh
         ih, iw = img.shape[:2]
-        x1 = x
-        y1 = y
-        x2 = x + w
-        y2 = y + h
-        if w < iw // 2:
-            px = min(iw - x - w, x, w // 5)
-            x1 = min(max(x - px, 0), iw)
-            x2 = min(max(x + w + px, 0), iw)
-        if h < ih // 2:
-            py = min(ih - y - h, y, h // 5)
-            y2 = min(max(y + h + py, 0), ih)
-            y1 = min(max(y - py, 0), ih)
+
+        # Asymmetric padding: wider upward to capture headwear (hats, horns, etc.)
+        pad_x = int(w * 0.30)
+        pad_y_up = int(h * 0.60)
+        pad_y_down = int(h * 0.30)
+
+        x1 = max(x - min(pad_x, x), 0)
+        x2 = min(x + w + min(pad_x, iw - (x + w)), iw)
+        y1 = max(y - min(pad_y_up, y), 0)
+        y2 = min(y + h + min(pad_y_down, ih - (y + h)), ih)
         return img[y1: y2, x1: x2], (x1, y1, x2, y2)
 
     input_head, (hx1, hy1, hx2, hy2) = _crop_head(input_img, [hx, hy, hw, hh])
@@ -343,8 +388,10 @@ if __name__ == '__main__':
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--resolution', type=int, default=1280)
     parser.add_argument('--save_to_psd', action='store_true')
-    parser.add_argument('--tblr_split', action='store_true',
-                        help='try split parts (handwear, eyes, etc) into left-right components')
+    parser.add_argument('--tblr_split', action='store_true', default=True,
+                        help='split parts (handwear, eyes, etc) into left-right components (default: on)')
+    parser.add_argument('--no_tblr_split', dest='tblr_split', action='store_false',
+                        help='disable left-right split')
     parser.add_argument('--quant_mode', type=str, default='nf4', choices=['nf4', 'none'],
                         help='quantization mode: nf4 (default, 4-bit) or none (bf16 baseline)')
     parser.add_argument('--repo_id_layerdiff', type=str, default=None,
@@ -394,6 +441,7 @@ if __name__ == '__main__':
     print(f"  Save dir: {save_dir}")
     print(f"  Resolution: {resolution}, Steps: {num_inference_steps}, Seed: {seed}")
 
+    require_cuda()
     torch.cuda.reset_peak_memory_stats()
     total_t0 = time.time()
 
