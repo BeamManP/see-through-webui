@@ -2,11 +2,10 @@
 See-through Easy — 手軽にレイヤー分解するためのラッパー
 
 使い方:
-  1. seethrough_easy.bat をダブルクリック
-  2. 画像パスを入力してエンター
-  3. 画像と同じフォルダに結果が保存される
+  NF4: seethrough_easy.bat をダブルクリック（または画像をD&D）
+  Full: seethrough_full.bat をダブルクリック（または画像をD&D）
 
-  または: 画像ファイルを seethrough_easy.bat にドラッグ＆ドロップ
+  --full オプションで Full bf16 モード（VRAM ~14GB）
 """
 
 import os
@@ -14,42 +13,11 @@ import sys
 import subprocess
 import time
 import shutil
-import math
 
 SEETHROUGH_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-# ピクセル予算（この面積に収まるよう解像度を計算）
-TARGET_PIXELS = 1280 * 1280
-# 解像度の上限（VRAM保護）
-MAX_RESOLUTION = 1792
-# 解像度は64の倍数にする（SDXL要件）
-RESOLUTION_STEP = 64
-
-
-def calc_resolution(img_w, img_h):
-    """入力画像のアスペクト比に合わせて最適な正方形解像度を計算する。
-
-    モデルは正方形入力を受け取り、画像は center_square_pad で
-    正方形に引き伸ばされる。アスペクト比が1:1から離れるほど
-    パディング領域が増えて解像度が無駄になる。
-
-    この関数は「画像コンテンツ部分のピクセル数 ≈ TARGET_PIXELS」
-    になるように正方形サイズ S を計算する。
-
-    公式: ratio = min(w,h) / max(w,h)
-           コンテンツ面積 = ratio * S²
-           ratio * S² = TARGET_PIXELS
-           S = sqrt(TARGET_PIXELS / ratio)
-    """
-    ratio = min(img_w, img_h) / max(img_w, img_h)
-    s = math.sqrt(TARGET_PIXELS / ratio)
-    # 64の倍数に丸める
-    s = int(round(s / RESOLUTION_STEP) * RESOLUTION_STEP)
-    # 上限クランプ
-    s = min(s, MAX_RESOLUTION)
-    # 下限（最低でも元の解像度は確保）
-    s = max(s, RESOLUTION_STEP)
-    return s
+# モデルは正方形入力固定（SDXLベース）。解像度を上げてもパディングが増えるだけ
+RESOLUTION = 1280
 
 
 def print_header():
@@ -61,39 +29,44 @@ def print_header():
     print()
 
 
-def process_image(img_path):
+def process_image(img_path, full_mode=False):
     """1枚の画像を処理する"""
     img_path = os.path.abspath(img_path)
     img_dir = os.path.dirname(img_path)
     img_name = os.path.splitext(os.path.basename(img_path))[0]
     output_dir = os.path.join(img_dir, img_name)
 
-    # 画像サイズ取得 → アスペクト比に応じた解像度計算
-    from PIL import Image
-    with Image.open(img_path) as im:
-        img_w, img_h = im.size
-    resolution = calc_resolution(img_w, img_h)
-    ratio_str = f"{img_w}x{img_h}"
-
-    print(f"  入力:   {img_path} ({ratio_str})")
+    mode_str = "Full bf16" if full_mode else "NF4量子化"
+    print(f"  入力:   {img_path}")
     print(f"  出力先: {output_dir}\\")
-    print(f"  NF4量子化 | 左右分割: ON | 解像度: {resolution} (自動) | steps: 30 | seed: 42")
+    print(f"  {mode_str} | 解像度: {RESOLUTION} | steps: 30 | seed: 42")
     print()
     print("-" * 54)
     print()
 
     start_time = time.time()
 
-    # 推論実行（inference_psd_quantized.py NF4モード）
-    cmd = [
-        sys.executable,
-        os.path.join(SEETHROUGH_ROOT, "inference", "scripts", "inference_psd_quantized.py"),
-        "--srcp", img_path,
-        "--save_to_psd",
-        "--quant_mode", "nf4",
-        "--resolution", str(resolution),
-        "--save_dir", img_dir,
-    ]
+    if full_mode:
+        # Full bf16（inference_psd.py）
+        cmd = [
+            sys.executable,
+            os.path.join(SEETHROUGH_ROOT, "inference", "scripts", "inference_psd.py"),
+            "--srcp", img_path,
+            "--save_to_psd",
+            "--save_dir", img_dir,
+        ]
+    else:
+        # NF4量子化（inference_psd_quantized.py）
+        cmd = [
+            sys.executable,
+            os.path.join(SEETHROUGH_ROOT, "inference", "scripts", "inference_psd_quantized.py"),
+            "--srcp", img_path,
+            "--save_to_psd",
+            "--quant_mode", "nf4",
+            "--resolution", str(RESOLUTION),
+            "--save_dir", img_dir,
+            "--no_group_offload",
+        ]
 
     result = subprocess.run(cmd, cwd=SEETHROUGH_ROOT)
 
@@ -151,15 +124,22 @@ def process_image(img_path):
 
 
 def main():
+    # --full フラグの判定
+    full_mode = "--full" in sys.argv
+    args = [a for a in sys.argv[1:] if a != "--full"]
+
     print_header()
+    if full_mode:
+        print("  *** Full bf16 モード (VRAM ~14GB) ***")
+        print()
 
     # D&D またはコマンドライン引数があればそれを使う
-    if len(sys.argv) > 1:
-        img_path = sys.argv[1].strip().strip('"')
+    if args:
+        img_path = args[0].strip().strip('"')
         if not os.path.isfile(img_path):
             print(f"  ✗ ファイルが見つかりません: {img_path}")
             return 1
-        process_image(img_path)
+        process_image(img_path, full_mode=full_mode)
         return 0
 
     # 対話モード（ループ）
@@ -178,7 +158,7 @@ def main():
             continue
 
         print()
-        process_image(raw)
+        process_image(raw, full_mode=full_mode)
         print("=" * 54)
         print()
 
