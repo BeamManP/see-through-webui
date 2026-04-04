@@ -35,4 +35,9 @@ local_*
 
 # ── Symlink (user creates locally: ln -sf common/assets assets) ──
 /assets
+
+# ── WebUI installer artifacts ─────────────────────────────────────
+venv/
+.pip_cache/
+.hf_cache/
 # end of file

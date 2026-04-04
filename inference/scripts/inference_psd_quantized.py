@@ -3,6 +3,9 @@
 Supports NF4 (default, 4-bit) and bf16 (baseline) modes. HF repos are auto-selected
 based on quant_mode. Builds pipelines directly without using inference_utils global singletons.
 
+New file added to See-through (https://github.com/shitagaki-lab/see-through).
+Licensed under Apache License 2.0.
+
 Usage (from repo root):
     python inference/scripts/inference_psd_quantized.py --srcp image.png --save_to_psd
     python inference/scripts/inference_psd_quantized.py --quant_mode none --no_group_offload
