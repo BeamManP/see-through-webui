@@ -11,9 +11,47 @@ cd /d "%~dp0"
 
 :: --- Config ---
 set "PIP_CACHE_DIR=%~dp0.pip_cache"
+set "LOGFILE=%~dp0install.log"
 
-:: --- Step 1: Find Python 3.10-3.12 ---
-echo [1/6] Python ...
+:: --- Init log ---
+echo See-through WebUI Install Log > "%LOGFILE%"
+echo Date: %date% %time% >> "%LOGFILE%"
+echo. >> "%LOGFILE%"
+
+:: ============================================================
+:: Pre-flight checks
+:: ============================================================
+
+:: --- Check 0a: NVIDIA GPU ---
+echo [0/7] Checking NVIDIA GPU ...
+nvidia-smi >nul 2>&1
+if not %errorlevel%==0 goto :err_no_gpu
+for /f "tokens=*" %%g in ('nvidia-smi --query-gpu=name --format=csv,noheader 2^>nul') do (
+    echo   GPU: %%g
+    echo   GPU: %%g >> "%LOGFILE%"
+)
+echo   OK
+echo.
+
+:: --- Check 0b: Disk space (need ~15GB) ---
+echo [0/7] Checking disk space ...
+for /f "tokens=3" %%f in ('dir /-C "%~dp0." 2^>nul ^| findstr /C:"bytes free"') do set "FREE_BYTES=%%f"
+:: Rough check: 15GB = 15000000000 bytes. We check if first 2 digits > 15 (for 10+ digit numbers)
+set "FREE_DISPLAY="
+if defined FREE_BYTES (
+    set "FREE_GB="
+    for /f %%n in ('powershell -Command "[math]::Floor(%FREE_BYTES% / 1GB)"') do set "FREE_GB=%%n"
+    echo   Free: !FREE_GB! GB >> "%LOGFILE%"
+    if !FREE_GB! LSS 15 goto :err_disk_space
+    echo   Free: !FREE_GB! GB
+)
+echo   OK
+echo.
+
+:: ============================================================
+:: Step 1: Find Python 3.10-3.12
+:: ============================================================
+echo [1/7] Python ...
 
 set "PYTHON_CMD="
 
@@ -81,10 +119,13 @@ set "PYTHON_CMD=py -3.12"
 echo   Python 3.12 installed.
 
 :python_ok
+echo   PYTHON_CMD=!PYTHON_CMD! >> "%LOGFILE%"
 echo.
 
-:: --- Step 2: Create venv ---
-echo [2/6] venv ...
+:: ============================================================
+:: Step 2: Create venv
+:: ============================================================
+echo [2/7] venv ...
 if exist "venv\Scripts\python.exe" (
     echo   OK: venv exists.
     goto :venv_ok
@@ -95,36 +136,42 @@ echo   OK: venv created.
 :venv_ok
 echo.
 
-:: --- Step 3: Upgrade pip ---
-echo [3/6] pip ...
-call venv\Scripts\python.exe -m pip install --upgrade pip --quiet 2>nul
+:: ============================================================
+:: Step 3: Upgrade pip
+:: ============================================================
+echo [3/7] pip ...
+call venv\Scripts\python.exe -m pip install --upgrade pip >> "%LOGFILE%" 2>&1
 echo   OK
 echo.
 
-:: --- Step 4: Install PyTorch ---
-echo [4/6] PyTorch + CUDA 12.8 ...
+:: ============================================================
+:: Step 4: Install PyTorch
+:: ============================================================
+echo [4/7] PyTorch + CUDA 12.8 ...
 echo   (first time: several minutes)
 call venv\Scripts\pip.exe install ^
     torch==2.8.0+cu128 ^
     torchvision==0.23.0+cu128 ^
     torchaudio==2.8.0+cu128 ^
-    --index-url https://download.pytorch.org/whl/cu128 ^
-    --quiet
+    --index-url https://download.pytorch.org/whl/cu128 >> "%LOGFILE%" 2>&1
 if %errorlevel% neq 0 goto :err_pytorch
 echo   OK
 echo.
 
-:: --- Step 5: Install dependencies ---
-echo [5/6] dependencies ...
+:: ============================================================
+:: Step 5: Install dependencies
+:: ============================================================
+echo [5/7] dependencies ...
 
 :: Install common and annotators as editable packages (local modules)
-call venv\Scripts\pip.exe install -e ./common -e ./annotators --quiet 2>nul
+echo   Installing common/annotators... >> "%LOGFILE%"
+call venv\Scripts\pip.exe install -e ./common -e ./annotators >> "%LOGFILE%" 2>&1
+if %errorlevel% neq 0 goto :err_deps
 
 :: Install WebUI requirements
-call venv\Scripts\pip.exe install -r webui\requirements.txt --quiet
-if %errorlevel% neq 0 (
-    echo   [WARNING] Some packages had errors.
-)
+echo   Installing webui requirements... >> "%LOGFILE%"
+call venv\Scripts\pip.exe install -r webui\requirements.txt >> "%LOGFILE%" 2>&1
+if %errorlevel% neq 0 goto :err_deps
 
 :: Handle assets folder (symlink alternative)
 if not exist "assets" (
@@ -135,19 +182,27 @@ if not exist "assets" (
 echo   OK
 echo.
 
-:: --- Step 6: Download NF4 models ---
-echo [6/6] NF4 models ...
+:: ============================================================
+:: Step 6: Verify CUDA
+:: ============================================================
+echo [6/7] Verifying CUDA ...
+call venv\Scripts\python.exe -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'; print(f'  CUDA: {torch.version.cuda}  GPU: {torch.cuda.get_device_name(0)}')" 2>> "%LOGFILE%"
+if %errorlevel% neq 0 goto :err_cuda
+echo   OK
+echo.
+
+:: ============================================================
+:: Step 7: Download NF4 models
+:: ============================================================
+echo [7/7] NF4 models ...
 echo   (first time: ~3GB download)
 set "HF_HOME=%~dp0.hf_cache"
 set "HF_HUB_DISABLE_SYMLINKS_WARNING=1"
 
 call venv\Scripts\python.exe -c ^
-    "import os; os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING']='1'; from huggingface_hub import snapshot_download; print('  LayerDiff NF4...'); snapshot_download('24yearsold/seethroughv0.0.2_layerdiff3d_nf4', cache_dir=r'%HF_HOME%', local_dir_use_symlinks=False); print('  Marigold NF4...'); snapshot_download('24yearsold/seethroughv0.0.1_marigold_nf4', cache_dir=r'%HF_HOME%', local_dir_use_symlinks=False); print('  OK')"
+    "import os; os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING']='1'; from huggingface_hub import snapshot_download; print('  LayerDiff NF4...'); snapshot_download('24yearsold/seethroughv0.0.2_layerdiff3d_nf4', cache_dir=r'%HF_HOME%', local_dir_use_symlinks=False); print('  Marigold NF4...'); snapshot_download('24yearsold/seethroughv0.0.1_marigold_nf4', cache_dir=r'%HF_HOME%', local_dir_use_symlinks=False); print('  OK')" 2>> "%LOGFILE%"
 
-if %errorlevel% neq 0 (
-    echo.
-    echo   [WARNING] Model download failed. Will retry on first launch.
-)
+if %errorlevel% neq 0 goto :err_model
 echo.
 
 :: --- Done ---
@@ -158,21 +213,47 @@ echo.
 echo   To start: double-click run.bat
 echo.
 echo ============================================================
+echo.
+echo   Log saved to: install.log
 pause
 exit /b 0
 
-:: --- Error handlers (outside parentheses to avoid encoding issues) ---
+:: ============================================================
+:: Error handlers (outside parentheses to avoid encoding issues)
+:: ============================================================
+
+:err_no_gpu
+echo.
+echo   [ERROR] NVIDIA GPU not detected.
+echo   This tool requires an NVIDIA GPU with CUDA support.
+echo   If you have an NVIDIA GPU, update your driver:
+echo   https://www.nvidia.com/drivers
+echo.
+echo   Log saved to: install.log
+pause
+exit /b 1
+
+:err_disk_space
+echo.
+echo   [ERROR] Not enough disk space. Need at least 15 GB free.
+echo   Current free: !FREE_GB! GB
+echo.
+echo   Log saved to: install.log
+pause
+exit /b 1
 
 :err_python_dl
 echo.
 echo   [ERROR] Download failed. Install Python manually:
 echo   https://www.python.org/downloads/
+echo   Log saved to: install.log
 pause
 exit /b 1
 
 :err_python_install
 echo   [ERROR] Python install failed. Install manually.
 del "%PY_INSTALLER%" 2>nul
+echo   Log saved to: install.log
 pause
 exit /b 1
 
@@ -180,11 +261,35 @@ exit /b 1
 echo.
 echo   [ERROR] Failed to create venv.
 echo   If conda is active, open a new Command Prompt and try again.
+echo   Log saved to: install.log
 pause
 exit /b 1
 
 :err_pytorch
-echo   [ERROR] PyTorch install failed.
-echo   Check your network connection.
+echo   [ERROR] PyTorch install failed. Check install.log for details.
+echo   Log saved to: install.log
+pause
+exit /b 1
+
+:err_deps
+echo   [ERROR] Dependency install failed. Check install.log for details.
+echo   Log saved to: install.log
+pause
+exit /b 1
+
+:err_cuda
+echo.
+echo   [ERROR] CUDA is not available after installing PyTorch.
+echo   Make sure you have an NVIDIA GPU and an up-to-date driver:
+echo   https://www.nvidia.com/drivers
+echo   Log saved to: install.log
+pause
+exit /b 1
+
+:err_model
+echo.
+echo   [ERROR] Model download failed. Check install.log for details.
+echo   You can retry by running install.bat again.
+echo   Log saved to: install.log
 pause
 exit /b 1

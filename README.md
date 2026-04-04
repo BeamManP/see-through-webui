@@ -31,6 +31,7 @@
 - ✅ 必要なソフトを全部セットアップ
 
 > 💡 初回は **15〜30分** かかります（ネット回線によります）。
+> 初回ダウンロード総量は約 **6GB**（Python + PyTorch + AI モデル）です。
 > 途中で止まっても、もう一度 `install.bat` を実行すれば続きからやり直せます。
 
 ### ステップ 2：起動
@@ -49,7 +50,7 @@
 | **GPU** | NVIDIA製（GeForce GTX 1060 以上） |
 | **VRAM** | 6GB 以上（8GB 以上推奨） |
 | **メモリ** | 8GB 以上 |
-| **空き容量** | 15GB 以上 |
+| **空き容量** | 20GB 以上 |
 | **Python** | なくてOK（自動インストールされます） |
 | **Git** | なくてOK（Releasesからzipをダウンロードしてください） |
 
@@ -70,17 +71,30 @@ WebUI のスライダーで調整できます。
 ## ❓ 困ったときは
 
 <details>
+<summary><b>ダウンロードや実行時に Windows の警告が出た</b></summary>
+
+ブラウザから ZIP をダウンロードすると、Windows Defender SmartScreen が警告を出すことがあります。
+これは未署名の配布物に対する一般的な警告で、ウイルスではありません。
+
+- Chrome: 「保存」→「詳細」→「保持する」
+- Edge: 「...」→「保持する」
+- 実行時: 「詳細情報」→「実行」
+</details>
+
+<details>
 <summary><b>install.bat でエラーが出た</b></summary>
 
 - もう一度 `install.bat` をダブルクリックしてみてください（途中から再開できます）
 - うまくいかない場合は、`venv` フォルダを丸ごと削除してからやり直してください
+- エラーの詳細は `install.log` に記録されています
 </details>
 
 <details>
-<summary><b>「CUDA error」と表示される</b></summary>
+<summary><b>「NVIDIA GPU not detected」と表示される</b></summary>
 
-NVIDIA のグラフィックドライバが古い可能性があります。
-最新版に更新してください → https://www.nvidia.com/drivers
+このツールは **NVIDIA GPU 専用** です（AMD / Intel GPU では動きません）。
+NVIDIA GPU があるのにエラーが出る場合は、ドライバを最新版に更新してください。
+→ https://www.nvidia.com/drivers
 </details>
 
 <details>

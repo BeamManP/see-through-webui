@@ -23,7 +23,7 @@ bitsandbytes==0.49.2
 
 # --- ML utilities (required by annotators/common) ---
 kornia==0.8.2
-timm
+timm==1.0.15
 grad-cam==1.5.5
 
 # --- Inference utilities ---
@@ -33,4 +33,5 @@ tqdm==4.67.3
 colorama==0.4.6
 
 # --- WebUI ---
-gradio>=6.11.0
+gradio==6.11.0
+matplotlib==3.9.4
