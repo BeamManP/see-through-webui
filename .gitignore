@@ -40,4 +40,9 @@ local_*
 venv/
 .pip_cache/
 .hf_cache/
-# end of file
+*.zip
+
+# ── Non-WebUI local files ─────────────────────────────────────────
+seethrough_colab_codex.ipynb
+requirements-colab-t4-nf4.txt
+seethrough_webui.bat
