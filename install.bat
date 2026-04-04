@@ -26,10 +26,6 @@ echo. >> "%LOGFILE%"
 echo [0/7] Checking NVIDIA GPU ...
 nvidia-smi >nul 2>&1
 if not %errorlevel%==0 goto :err_no_gpu
-for /f "tokens=*" %%g in ('nvidia-smi --query-gpu=name --format=csv,noheader 2^>nul') do (
-    echo   GPU: %%g
-    echo   GPU: %%g >> "%LOGFILE%"
-)
 echo   OK
 echo.
 
