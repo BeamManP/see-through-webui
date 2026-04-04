@@ -91,8 +91,10 @@ echo.
 echo [2/6] 仮想環境を作成しています...
 if not exist "venv\Scripts\python.exe" (
     %PYTHON_CMD% -m venv venv
-    if %errorlevel% neq 0 (
+    if not exist "venv\Scripts\python.exe" (
+        echo.
         echo   [ERROR] venv の作成に失敗しました。
+        echo   conda が有効な場合は、新しいコマンドプロンプトから実行してください。
         pause
         exit /b 1
     )

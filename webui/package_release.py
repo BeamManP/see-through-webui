@@ -14,6 +14,7 @@ INCLUDE_FILES = [
     # --- Root ---
     "install.bat",
     "run.bat",
+    "README.md",
     "LICENSE",
     ".gitignore",
 
