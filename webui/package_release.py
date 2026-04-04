@@ -16,6 +16,7 @@ INCLUDE_FILES = [
     "run.bat",
     "README.md",
     "LICENSE",
+    ".gitattributes",
     ".gitignore",
 
     # --- WebUI ---
@@ -75,7 +76,14 @@ def package_release(repo_root: Path, output: Path):
         for rel in INCLUDE_FILES:
             src = repo_root / rel
             if src.exists():
-                zf.write(src, f"see-through-webui/{rel}")
+                arcname = f"see-through-webui/{rel}"
+                # Force CRLF for batch files (cmd.exe requires it)
+                if src.suffix.lower() in (".bat", ".cmd"):
+                    content = src.read_text(encoding="utf-8")
+                    content = content.replace("\r\n", "\n").replace("\n", "\r\n")
+                    zf.writestr(arcname, content.encode("utf-8"))
+                else:
+                    zf.write(src, arcname)
                 count += 1
             else:
                 print(f"  [SKIP] {rel} (not found)")
