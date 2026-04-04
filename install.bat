@@ -111,7 +111,7 @@ echo   Installing...
 if %errorlevel% neq 0 goto :err_python_install
 del "%PY_INSTALLER%" 2>nul
 set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;%PATH%"
-set "PYTHON_CMD=py -3.12"
+set "PYTHON_CMD=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
 echo   Python 3.12 installed.
 
 :python_ok
