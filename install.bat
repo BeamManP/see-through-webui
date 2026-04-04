@@ -136,8 +136,9 @@ echo.
 :: Step 3: Upgrade pip
 :: ============================================================
 echo [3/7] pip ...
-call venv\Scripts\python.exe -m pip install --upgrade pip >> "%LOGFILE%" 2>&1
+call venv\Scripts\python.exe -m pip install --upgrade pip --quiet 2>nul
 echo   OK
+echo [3/7] pip: OK >> "%LOGFILE%"
 echo.
 
 :: ============================================================
@@ -149,9 +150,10 @@ call venv\Scripts\pip.exe install ^
     torch==2.8.0+cu128 ^
     torchvision==0.23.0+cu128 ^
     torchaudio==2.8.0+cu128 ^
-    --index-url https://download.pytorch.org/whl/cu128 >> "%LOGFILE%" 2>&1
+    --index-url https://download.pytorch.org/whl/cu128
 if %errorlevel% neq 0 goto :err_pytorch
 echo   OK
+echo [4/7] PyTorch: OK >> "%LOGFILE%"
 echo.
 
 :: ============================================================
@@ -160,13 +162,13 @@ echo.
 echo [5/7] dependencies ...
 
 :: Install common and annotators as editable packages (local modules)
-echo   Installing common/annotators... >> "%LOGFILE%"
-call venv\Scripts\pip.exe install -e ./common -e ./annotators >> "%LOGFILE%" 2>&1
+echo   common / annotators ...
+call venv\Scripts\pip.exe install -e ./common -e ./annotators
 if %errorlevel% neq 0 goto :err_deps
 
 :: Install WebUI requirements
-echo   Installing webui requirements... >> "%LOGFILE%"
-call venv\Scripts\pip.exe install -r webui\requirements.txt >> "%LOGFILE%" 2>&1
+echo   webui requirements ...
+call venv\Scripts\pip.exe install -r webui\requirements.txt
 if %errorlevel% neq 0 goto :err_deps
 
 :: Handle assets folder (symlink alternative)
@@ -176,6 +178,7 @@ if not exist "assets" (
 )
 
 echo   OK
+echo [5/7] dependencies: OK >> "%LOGFILE%"
 echo.
 
 :: ============================================================
@@ -196,9 +199,10 @@ set "HF_HOME=%~dp0.hf_cache"
 set "HF_HUB_DISABLE_SYMLINKS_WARNING=1"
 
 call venv\Scripts\python.exe -c ^
-    "import os; os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING']='1'; from huggingface_hub import snapshot_download; print('  LayerDiff NF4...'); snapshot_download('24yearsold/seethroughv0.0.2_layerdiff3d_nf4', cache_dir=r'%HF_HOME%', local_dir_use_symlinks=False); print('  Marigold NF4...'); snapshot_download('24yearsold/seethroughv0.0.1_marigold_nf4', cache_dir=r'%HF_HOME%', local_dir_use_symlinks=False); print('  OK')" 2>> "%LOGFILE%"
+    "import os; os.environ['HF_HUB_DISABLE_SYMLINKS_WARNING']='1'; from huggingface_hub import snapshot_download; print('  LayerDiff NF4...'); snapshot_download('24yearsold/seethroughv0.0.2_layerdiff3d_nf4', cache_dir=r'%HF_HOME%', local_dir_use_symlinks=False); print('  Marigold NF4...'); snapshot_download('24yearsold/seethroughv0.0.1_marigold_nf4', cache_dir=r'%HF_HOME%', local_dir_use_symlinks=False); print('  OK')"
 
 if %errorlevel% neq 0 goto :err_model
+echo [7/7] models: OK >> "%LOGFILE%"
 echo.
 
 :: --- Done ---
