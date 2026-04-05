@@ -47,12 +47,15 @@
 | 必要なもの | 条件 |
 |-----------|------|
 | **OS** | Windows 10 / 11（64ビット） |
-| **GPU** | NVIDIA製（GeForce GTX 1060 以上） |
-| **VRAM** | 6GB 以上（8GB 以上推奨） |
+| **GPU** | NVIDIA RTX 2060 以上（Turing世代以降） |
+| **VRAM** | 8GB 以上 |
 | **メモリ** | 8GB 以上 |
 | **空き容量** | 20GB 以上 |
 | **Python** | なくてOK（自動インストールされます） |
 | **Git** | なくてOK（Releasesからzipをダウンロードしてください） |
+
+> ⚠️ **GTX 10xx / 16xx シリーズでは動作しません。**
+> NF4 量子化に必要な機能が Turing 世代（RTX 20xx）以降の GPU にしかないためです。
 
 ### VRAM と解像度の目安
 
@@ -61,7 +64,7 @@ WebUI のスライダーで調整できます。
 
 | 解像度 | VRAM 使用量 | おすすめ環境 |
 |--------|-----------|------------|
-| 512    | 約 5GB    | GTX 1060 6GB / RTX 3060 |
+| 512    | 約 5GB    | RTX 2060 / RTX 3060 |
 | 768    | 約 5.5GB  | RTX 3060 / RTX 4060 |
 | 1024   | 約 7GB    | RTX 3060 Ti / RTX 4060 Ti |
 | 1280   | 約 9GB    | RTX 3080 / RTX 4070 以上 |
@@ -101,6 +104,13 @@ NVIDIA GPU があるのにエラーが出る場合は、ドライバを最新版
 <summary><b>生成中に「Out of Memory」と出る</b></summary>
 
 VRAM が足りません。WebUI の解像度スライダーを **512 〜 768** に下げてみてください。
+</details>
+
+<details>
+<summary><b>「Error named symbol not found」と表示される</b></summary>
+
+GTX 10xx / 16xx シリーズの GPU では動作しません。
+NF4 量子化（VRAM節約のための技術）が RTX 20xx 以降の GPU を必要とするためです。
 </details>
 
 <details>
