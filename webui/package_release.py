@@ -22,6 +22,7 @@ INCLUDE_FILES = [
     # --- WebUI ---
     "webui/README.md",
     "webui/requirements.txt",
+    "webui/setup.py",
     "webui/package_release.py",
 
     # --- Tools ---

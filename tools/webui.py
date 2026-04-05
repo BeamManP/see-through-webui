@@ -72,7 +72,7 @@ def collect_layers(output_dir):
 def parse_log_status(log_path):
     """Parse log file tail to extract current stage and progress bar."""
     if not os.path.exists(log_path):
-        return "⏳ 準備中..."
+        return "⏳ モデル初期化中...（初回は数分かかることがあります）"
 
     try:
         size = os.path.getsize(log_path)
@@ -80,13 +80,13 @@ def parse_log_status(log_path):
             f.seek(max(0, size - 6000))
             tail = f.read()
     except Exception:
-        return "⏳ 処理中..."
+        return "⏳ モデル初期化中..."
 
     # Strip ANSI escape codes
     tail = re.sub(r"\x1b\[[0-9;]*[a-zA-Z]", "", tail)
 
     # Detect current stage (last match wins)
-    current_stage = "⏳ 準備中..."
+    current_stage = "⏳ モデル初期化中...（初回は数分かかることがあります）"
     for keyword, label in STAGE_MARKERS:
         if keyword in tail:
             current_stage = label
