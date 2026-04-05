@@ -11,7 +11,7 @@
 <img src="common/assets/representative.jpg" width="600">
 
 *[See-through](https://github.com/shitagaki-lab/see-through) のローカル実行用 WebUI です。*
-*Python やコマンドラインの知識は不要 — ダブルクリックだけで使えます。*
+*Windows + NVIDIA GPU 専用。Python やコマンドラインの知識は不要 — ダブルクリックだけで使えます。*
 
 <img src="docs/img.png" width="800">
 
