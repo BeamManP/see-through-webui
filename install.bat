@@ -1,4 +1,13 @@
 @echo off
+
+:: If running inside PowerShell, re-launch in cmd.exe
+if defined PSModulePath if not defined __INSTALL_CMD (
+    set "__INSTALL_CMD=1"
+    cmd /c "%~f0" %*
+    pause
+    exit /b %errorlevel%
+)
+
 chcp 65001 >nul
 setlocal EnableDelayedExpansion
 

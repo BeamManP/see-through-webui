@@ -1,4 +1,12 @@
 @echo off
+
+:: If running inside PowerShell, re-launch in cmd.exe
+if defined PSModulePath if not defined __RUN_CMD (
+    set "__RUN_CMD=1"
+    cmd /c "%~f0" %*
+    exit /b %errorlevel%
+)
+
 chcp 65001 >nul
 cd /d "%~dp0"
 
