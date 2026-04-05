@@ -135,8 +135,22 @@ if exist "venv\Scripts\python.exe" (
     echo   OK: venv exists.
     goto :venv_ok
 )
-!PYTHON_CMD! -m venv venv
+
+:: Try standard venv first
+!PYTHON_CMD! -m venv venv 2>nul
+if exist "venv\Scripts\python.exe" goto :venv_created
+
+:: venv module might be missing - try virtualenv as fallback
+echo   venv module not found, installing virtualenv ...
+!PYTHON_CMD! -m pip install virtualenv --quiet 2>nul
+if %errorlevel% neq 0 (
+    !PYTHON_CMD! -m ensurepip --default-pip 2>nul
+    !PYTHON_CMD! -m pip install virtualenv --quiet 2>nul
+)
+!PYTHON_CMD! -m virtualenv venv 2>nul
 if not exist "venv\Scripts\python.exe" goto :err_venv
+
+:venv_created
 echo   OK: venv created.
 :venv_ok
 echo.
