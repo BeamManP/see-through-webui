@@ -103,8 +103,23 @@ echo   Installing ...
 "%PY_INSTALLER%" /passive InstallAllUsers=0 PrependPath=1 Include_launcher=1 Include_pip=1
 if %errorlevel% neq 0 goto :err_python_install
 del "%PY_INSTALLER%" 2>nul
-set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;%PATH%"
+set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%LOCALAPPDATA%\Programs\Python\Python312\Scripts;%LOCALAPPDATA%\Programs\Python\Launcher;%PATH%"
+
+:: Find where Python was actually installed
 set "PYTHON_CMD=%LOCALAPPDATA%\Programs\Python\Python312\python.exe"
+if not exist "!PYTHON_CMD!" (
+    echo   Standard path not found, searching...
+    for /f "delims=" %%p in ('where python 2^>nul') do (
+        set "PYTHON_CMD=%%p"
+        goto :python_found
+    )
+    for /f "delims=" %%p in ('where py 2^>nul') do (
+        set "PYTHON_CMD=%%p -3.12"
+        goto :python_found
+    )
+    goto :err_python_install
+)
+:python_found
 echo   OK: Python 3.12 installed.
 
 :python_ok
